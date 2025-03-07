@@ -33,4 +33,8 @@ export abstract class MeshTile<T> {
 	public parent() {
 		this.meshPart!.Parent = Workspace;
 	}
+
+	public unparent() {
+		this.meshPart!.Parent = game;
+	}
 }

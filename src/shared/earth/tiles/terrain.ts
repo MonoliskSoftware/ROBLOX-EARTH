@@ -1,6 +1,7 @@
 import { AssetService } from "@rbxts/services";
 import { Coord, Mapbox } from "shared/libraries/mapbox";
 import { tileToBBOX } from "shared/libraries/tilebelt";
+import { TileInterface } from "../tile-interface";
 import { MeshTile } from "./mesh-tile";
 
 // Given 4 vertex IDs, adds a new normal and 2 triangles, making a sharp quad
@@ -98,9 +99,9 @@ function reduceMatrixResolution<T extends defined>(matrix: T[][], factor: number
 }
 
 export const METERS_TO_STUDS = 3.936;
-export const EARTH_RADIUS = 6378137 * METERS_TO_STUDS;
+export const EARTH_RADIUS = 6378137;
 export const SCALE_FACTOR = 1 / 25;
-export const HEIGHT_SCALE = 4;
+export const HEIGHT_SCALE = 1;
 
 function generateImage(image: EditableImage, color: Mapbox.ImageMatrix) {
 	const dims = [color.size(), color[0].size()];
@@ -126,7 +127,7 @@ export class TerrainTile extends MeshTile<number[][]> {
 	private vertices: number[][];
 	private image = AssetService.CreateEditableImage();
 
-	constructor(position: [number, number, number], data: number[][], originOffset: CFrame, color: Mapbox.ImageMatrix) {
+	constructor(position: [number, number, number], data: number[][], originOffset: CFrame, color: Mapbox.ImageMatrix, i: TileInterface) {
 		data = reduceMatrixResolution(data, 4);
 
 		super(position, data, originOffset);
@@ -146,7 +147,7 @@ export class TerrainTile extends MeshTile<number[][]> {
 
 			for (let y = 0; y < dims[1]; y++) {
 				const final = (EARTH_RADIUS + HEIGHT_SCALE * data[dims[0] - 1 - x][y]) * SCALE_FACTOR;
-				const pos = Coord.coordToVector3(new Vector2(bounds[1] + gridWidth * x, bounds[0] + gridHeight * y), this.originOffset, final);
+				const pos = Coord.coordToVector3(new Vector2(bounds[1] + gridWidth * x, bounds[0] + gridHeight * y), this.originOffset, final * METERS_TO_STUDS);
 
 				this.vertices[x][y] = this.mesh.AddVertex(pos);
 
@@ -176,6 +177,13 @@ export class TerrainTile extends MeshTile<number[][]> {
 		generateImage(this.image, color);
 
 		this.meshPart!.TextureContent = Content.fromObject(this.image);
+		// debug
+		this.meshPart!.Name = `${position[2]}/${position[0]}/${position[1]}`;
+
+		const v = new Instance("BoolValue");
+
+		v.Changed.Connect(() => i.handleTileClick(this.meshPart!.Name));
+		v.Parent = this.meshPart;
 	}
 
 	protected dispose(): void {
