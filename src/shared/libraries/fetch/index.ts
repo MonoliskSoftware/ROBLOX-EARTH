@@ -2,7 +2,7 @@ import Object from "@rbxts/object-utils";
 import { HttpService } from "@rbxts/services";
 
 // Define types to mimic standard Response interface
-interface RobloxResponse {
+export interface RobloxResponse {
 	readonly ok: boolean;
 	readonly status: number;
 	readonly statusText: string;
@@ -11,6 +11,7 @@ interface RobloxResponse {
 
 	text(): Promise<string>;
 	json(): Promise<unknown>;
+	arrayBuffer(): Promise<Array<number>>;
 }
 
 // Define request options to match fetch API
@@ -61,6 +62,18 @@ export async function fetch(url: string, options: FetchOptions = {}): Promise<Ro
 				} catch (err) {
 					throw "Failed to parse JSON";
 				}
+			},
+
+			async arrayBuffer() {
+				// Convert string response to byte array
+				const body = response.Body;
+				const bytes: Array<number> = [];
+
+				for (let i = 0; i < body.size(); i++) {
+					bytes.push(string.byte(body, i + 1)[0]);
+				}
+
+				return bytes;
 			}
 		};
 
@@ -79,6 +92,10 @@ export async function fetch(url: string, options: FetchOptions = {}): Promise<Ro
 			},
 
 			async json() {
+				throw tostring(err);
+			},
+
+			async arrayBuffer() {
 				throw tostring(err);
 			}
 		};
