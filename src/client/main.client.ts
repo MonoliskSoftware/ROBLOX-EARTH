@@ -1,3 +1,5 @@
-import { makeHello } from "shared/module";
+import { DEFAULT_CONFIG } from "shared/config";
+import { TileInterface } from "shared/earth/tile-interface";
 
-print(makeHello("main.client.ts"));
+const config = DEFAULT_CONFIG;
+const int = new TileInterface(config.position, config.zoom, config.targetZoom, config.baseZoom);

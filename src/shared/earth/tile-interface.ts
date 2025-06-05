@@ -1,7 +1,10 @@
 import Object from '@rbxts/object-utils';
-import { Coord, Mapbox, MapboxStore } from 'shared/libraries/mapbox';
+import { Workspace } from '@rbxts/services';
+import { DEFAULT_CONFIG } from 'shared/config';
+import { Coord, Mapbox } from 'shared/libraries/mapbox';
+import { MapboxStore } from 'shared/libraries/mapbox/store';
 import { TerrainRGB } from 'shared/libraries/terrainrgb';
-import { EARTH_RADIUS, SCALE_FACTOR, TerrainTile } from './tiles/terrain';
+import { EARTH_RADIUS, METERS_TO_STUDS, TerrainTile } from './tiles/terrain';
 
 // Define TileState type for clarity
 type TileState = {
@@ -30,6 +33,7 @@ export class TileInterface {
 	private pos: Coord;
 	private zoom: number;
 	private nextZoom: number;
+	private initialZoom: number;
 
 	private updatePromise: Promise<void> | undefined;
 	private willUpdate = false;
@@ -38,7 +42,9 @@ export class TileInterface {
 	private clickQueue: string[] = [];
 	private processingClicks = false;
 
-	constructor(pos: Coord, zoom: number) {
+	private posZoom: number;
+
+	constructor(pos: Coord, zoom: number, posZoom: number, initialZoom?: number) {
 		// Initialize state machine properties
 		this.currentState = 'INITIAL';
 		this.loadedTiles = new Map();
@@ -50,34 +56,48 @@ export class TileInterface {
 		this.zoom = zoom;
 		this.nextZoom = zoom;
 
+		this.posZoom = posZoom
+
+		// Set initial zoom level
+		this.initialZoom = initialZoom !== undefined ? initialZoom : zoom;
+
 		// Start the state machine
 		this.start();
 	}
 
 	/**
-	 * Initialize the state machine and load the root tile
+	 * Initialize the state machine and load the initial tiles at the specified zoom level
 	 */
 	private async start() {
 		this.currentState = 'LOADING_ROOT';
 
-		// Start with zoom level 0 (entire Earth) 
-		// or use the provided zoom level if you want to start more zoomed in
-		const startZoom = 0; // Set to 0 for full Earth, or this.zoom for starting zoomed in
-		const startX = 0;
-		const startY = 0;
+		// Calculate which tile covers our current position at the initial zoom level
+		const initialTilePosition = pointToTile(this.pos.longitude, this.pos.latitude, this.initialZoom);
+		const initialX = initialTilePosition[0];
+		const initialY = initialTilePosition[1];
+		const initialZ = this.initialZoom;
 
-		// Load initial tile
-		this.rootTile = await this.loadTile(startZoom, startX, startY);
-		this.loadedTiles.set(`${startZoom}/${startX}/${startY}`, this.rootTile);
+		// Load the initial tile directly at the specified zoom level
+		this.rootTile = await this.loadTile(initialZ, initialX, initialY);
+		const rootTileId = `${initialZ}/${initialX}/${initialY}`;
+		this.loadedTiles.set(rootTileId, this.rootTile);
 
 		this.currentState = 'RENDERING_ROOT';
 		this.renderTile(this.rootTile);
 
 		this.currentState = 'IDLE';
 
-		// If starting zoom is different than 0, subdivide to reach desired level
-		if (this.zoom > 0) {
-			await this.zoomToLevel(this.zoom);
+		// If the target zoom is higher than the initial zoom, continue loading more detailed tiles
+		if (this.zoom > this.initialZoom) {
+			await this.zoomToLevel(this.zoom, this.rootTile);
+		}
+
+		if (this.posZoom > this.zoom) {
+			for (let i = this.zoom; i <= this.posZoom; i++) {
+				const tilePosition = pointToTile(this.pos.longitude, this.pos.latitude, i);
+
+				await this.handleTileClick(`${i}/${tilePosition[0]}/${tilePosition[1]}`)
+			}
 		}
 	}
 
@@ -155,6 +175,9 @@ export class TileInterface {
 		if (!tile.subdivided) {
 			await this.subdivide(tile);
 		}
+
+		// Toggle visibility of children
+		this.toggleChildTiles(tile);
 
 		// Recursively subdivide all children to reach the target zoom
 		for (const child of tile.children) {
@@ -271,7 +294,7 @@ export class TileInterface {
 			const heightMatrix = TerrainRGB.createTileMatrix(elevation);
 
 			// Create the offset for positioning
-			const offset = Coord.coordToVector3(this.pos, undefined, EARTH_RADIUS * SCALE_FACTOR);
+			const offset = Coord.coordToVector3(this.pos, undefined, EARTH_RADIUS * DEFAULT_CONFIG.scaleFactor * METERS_TO_STUDS);
 			const finalOffset = CFrame.lookAt(offset, Vector3.zero)
 				.mul(CFrame.fromEulerAnglesXYZ(math.pi / 2, 0, 0))
 				.Inverse();
@@ -290,6 +313,19 @@ export class TileInterface {
 			return tile;
 		} catch (error) {
 			warn(`Failed to load tile ${z}/${x}/${y}: ${error}`);
+
+			{
+				const g = new Instance("Folder");
+
+				g.Name = `${z}/${x}/${y}`;
+				g.Parent = Workspace;
+
+				const v = new Instance("BoolValue");
+
+				v.Changed.Connect(() => this.handleTileClick(g.Name));
+				v.Parent = g;
+			}
+
 			this.currentState = 'IDLE';
 			return tile;
 		}
@@ -367,12 +403,18 @@ export class TileInterface {
 		} else {
 			// Need to load new tiles - first make sure we're at the right zoom level
 			if (this.rootTile) {
-				await this.zoomToLevel(this.zoom);
+				await this.zoomToLevel(this.zoom, this.rootTile);
 
 				// Now find and load the specific tile we need
-				const closestAncestor = this.findClosestLoadedAncestor(this.zoom, tilePosition[0], tilePosition[1]);
-				if (closestAncestor) {
-					await this.subdividePathTo(closestAncestor, this.zoom, tilePosition[0], tilePosition[1]);
+				const tileAtPosition = this.loadedTiles.get(targetTileId);
+				if (tileAtPosition) {
+					this.makePathVisible(tileAtPosition);
+				} else {
+					// Try to find the closest ancestor we have loaded
+					const closestAncestor = this.findClosestLoadedAncestor(this.zoom, tilePosition[0], tilePosition[1]);
+					if (closestAncestor) {
+						await this.subdividePathTo(closestAncestor, this.zoom, tilePosition[0], tilePosition[1]);
+					}
 				}
 			}
 		}
@@ -393,7 +435,7 @@ export class TileInterface {
 
 			// Find parent (using parent tile coordinates)
 			const parentZ = current.z - 1;
-			if (parentZ < 0) break;
+			if (parentZ < this.initialZoom) break; // Don't go below initial zoom level
 
 			const parentX = math.floor(current.x / 2);
 			const parentY = math.floor(current.y / 2);
@@ -434,8 +476,8 @@ export class TileInterface {
 			return this.loadedTiles.get(tileId) || undefined;
 		}
 
-		// Search for ancestors
-		for (let currentZ = z - 1; currentZ >= 0; currentZ--) {
+		// Search for ancestors, but don't go below the initial zoom level
+		for (let currentZ = z - 1; currentZ >= this.initialZoom; currentZ--) {
 			const scale = 2 ** (z - currentZ);
 			const ancestorX = math.floor(x / scale);
 			const ancestorY = math.floor(y / scale);
@@ -446,6 +488,7 @@ export class TileInterface {
 			}
 		}
 
+		// Return the root tile as fallback
 		return this.rootTile;
 	}
 

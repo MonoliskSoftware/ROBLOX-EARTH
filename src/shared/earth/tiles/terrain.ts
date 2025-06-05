@@ -1,4 +1,5 @@
 import { AssetService } from "@rbxts/services";
+import { DEFAULT_CONFIG } from "shared/config";
 import { Coord, Mapbox } from "shared/libraries/mapbox";
 import { tileToBBOX } from "shared/libraries/tilebelt";
 import { TileInterface } from "../tile-interface";
@@ -29,7 +30,7 @@ function addSmoothQuad(eMesh: EditableMesh, vid0: number, vid1: number, vid2: nu
 	h -= 1;
 
 	// Compute a smooth normal for the entire quad
-	const normal = new Vector3(0, 0, 1); // Assuming the quad is on the XY plane
+	const normal = new Vector3(0, 1, 0); // Assuming the quad is on the XY plane
 	const nid0 = eMesh.AddNormal(normal);
 	const nid1 = eMesh.AddNormal(normal);
 	const nid2 = eMesh.AddNormal(normal);
@@ -100,7 +101,6 @@ function reduceMatrixResolution<T extends defined>(matrix: T[][], factor: number
 
 export const METERS_TO_STUDS = 3.936;
 export const EARTH_RADIUS = 6378137;
-export const SCALE_FACTOR = 1 / 25;
 export const HEIGHT_SCALE = 1;
 
 function generateImage(image: EditableImage, color: Mapbox.ImageMatrix) {
@@ -128,7 +128,8 @@ export class TerrainTile extends MeshTile<number[][]> {
 	private image = AssetService.CreateEditableImage();
 
 	constructor(position: [number, number, number], data: number[][], originOffset: CFrame, color: Mapbox.ImageMatrix, i: TileInterface) {
-		data = reduceMatrixResolution(data, 4);
+		data = reduceMatrixResolution(data, 16);
+		color = reduceMatrixResolution(color, 16);
 
 		super(position, data, originOffset);
 
@@ -146,7 +147,7 @@ export class TerrainTile extends MeshTile<number[][]> {
 			this.vertices[x] = [];
 
 			for (let y = 0; y < dims[1]; y++) {
-				const final = (EARTH_RADIUS + HEIGHT_SCALE * data[dims[0] - 1 - x][y]) * SCALE_FACTOR;
+				const final = (EARTH_RADIUS + HEIGHT_SCALE * data[dims[0] - 1 - x][y]) * DEFAULT_CONFIG.scaleFactor;
 				const pos = Coord.coordToVector3(new Vector2(bounds[1] + gridWidth * x, bounds[0] + gridHeight * y), this.originOffset, final * METERS_TO_STUDS);
 
 				this.vertices[x][y] = this.mesh.AddVertex(pos);
@@ -159,7 +160,7 @@ export class TerrainTile extends MeshTile<number[][]> {
 
 		for (let x = 0; x < this.vertices.size() - 1; x++) {
 			for (let y = 0; y < this.vertices[x].size() - 1; y++) {
-				addSmoothQuad(this.mesh,
+				addSharpQuad(this.mesh,
 					this.vertices[x + 1][y],
 					this.vertices[x][y],
 					this.vertices[x][y + 1],
