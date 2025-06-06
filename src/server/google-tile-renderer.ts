@@ -1,5 +1,6 @@
 import { AssetService, TweenService, Workspace } from "@rbxts/services";
-import { applyTextureToMesh, generateEditableMeshFromData } from "shared/libraries/rbmesh";
+import { EARTH_RADIUS, METERS_TO_STUDS } from "shared/earth/tiles/terrain";
+import { applyTextureToMesh, generateEditableMeshFromData, ORIGIN_RELATIVE, scale, SCALE_FACTOR } from "shared/libraries/rbmesh";
 
 export type GoogleTileData = {
 	meshes: {
@@ -28,14 +29,14 @@ export class TileRenderer {
 	private primitives = new Array<Primitive>();
 
 	constructor(private readonly path: string, private readonly tileData: GoogleTileData) {
-		try {
-			for (let i = 0; i < tileData.meshes[0].primitives.size(); i++) {
-				const meshData = tileData.meshes[0].primitives[i];
-				const textureData = tileData.textures[meshData.texture];
+		for (let i = 0; i < tileData.meshes[0].primitives.size(); i++) {
+			const meshData = tileData.meshes[0].primitives[i];
+			const textureData = tileData.textures[meshData.texture];
 
+			try {
 				const meshes = generateEditableMeshFromData(meshData, new Vector2(textureData[0].size() / 512, textureData.size() / 512));
 
-				for (const mesh of meshes) {
+				for (const [origin, mesh] of meshes) {
 					const texture = applyTextureToMesh(tileData.textures[meshData.texture]);
 					const meshPart = AssetService.CreateMeshPartAsync(Content.fromObject(mesh));
 
@@ -52,9 +53,23 @@ export class TileRenderer {
 
 					this.primitives.push(primitive);
 				}
+			} catch (e) {
+				warn(`Failed to load primitive ${i} of tile ${path}: ${e}`);
+
+				const meshPart = new Instance("MeshPart");
+				const primitiveOrigin = ORIGIN_RELATIVE.mul(new CFrame(meshData.origin[0], meshData.origin[1], meshData.origin[2]));
+
+				meshPart.Position = scale(primitiveOrigin, SCALE_FACTOR).Position
+				meshPart.Anchored = true;
+				meshPart.Size = Vector3.one.mul((EARTH_RADIUS * METERS_TO_STUDS) / path.size());
+				meshPart.Name = `${path}.${this.primitives.size()}`;
+
+				const primitive = {
+					meshPart
+				} as Primitive;
+
+				this.primitives.push(primitive);
 			}
-		} catch (e) {
-			warn(`Failed to load tile: ${e}`);
 		}
 
 		this.setRendering(true);

@@ -45,12 +45,12 @@ function getMoveToNorthPoleCFrame(P: Vector3): CFrame {
 	// return CFrame.fromMatrix(targetPos, right, normal, localForward);
 }
 
-function scale(cframe: CFrame, mul: number) {
+export function scale(cframe: CFrame, mul: number) {
 	return new CFrame(cframe.Position.mul(mul)).mul(cframe.sub(cframe.Position));
 }
 
 export const mainCoord = new Coord(40.64257462046939, -73.77675633571651);
-export const SCALE_FACTOR = METERS_TO_STUDS / 1;
+export const SCALE_FACTOR = METERS_TO_STUDS / 500;
 export const position = mainCoord.toVector3(CFrame.identity, EARTH_RADIUS);
 export const ORIGIN_RELATIVE = getMoveToNorthPoleCFrame(position);
 
@@ -135,16 +135,18 @@ export function generateEditableMeshFromData(meshData: {
 	indices: number[],
 	origin: number[],
 	texture: number
-}, mul: Vector2) {
+}, mul: Vector2): [CFrame, EditableMesh][] {
 	const positions = new Array<Vector3>();
 	const normals = new Array<Vector3>();
 	const uvs = new Array<Vector2>();
 	const faces = new Array<Face>();
 
+	const primitiveOrigin = ORIGIN_RELATIVE.mul(new CFrame(meshData.origin[0], meshData.origin[1], meshData.origin[2]));
+
 	for (let i = 0; i < meshData.positions.size(); i += 3) {
 		const pos = new Vector3(meshData.positions[i], meshData.positions[i + 1], meshData.positions[i + 2]);
 
-		positions.push(scale(ORIGIN_RELATIVE.mul(new CFrame(pos)), SCALE_FACTOR).Position);
+		positions.push(scale(primitiveOrigin.mul(new CFrame(pos)), SCALE_FACTOR).Position);
 	}
 
 	// Add normals if present
@@ -152,7 +154,7 @@ export function generateEditableMeshFromData(meshData: {
 		for (let i = 0; i < meshData.normals.size(); i += 3) {
 			const normal = new Vector3(meshData.normals[i], meshData.normals[i + 1], meshData.normals[i + 2]);
 
-			normals.push(scale(ORIGIN_RELATIVE.mul(new CFrame(normal)), SCALE_FACTOR).Position);
+			normals.push(scale(primitiveOrigin.mul(new CFrame(normal)), SCALE_FACTOR).Position);
 		}
 	}
 
@@ -179,50 +181,51 @@ export function generateEditableMeshFromData(meshData: {
 		faces.push(face);
 	}
 
-	const chunks = new Array<Face[]>();
-	let currentChunk = 0;
+	// const chunks = new Array<Face[]>();
+	// let currentChunk = 0;
 
-	for (const face of faces) {
-		if (!chunks[currentChunk] || chunks[currentChunk].size() === 0) {
-			if (!chunks[currentChunk]) chunks[currentChunk] = [face]; else chunks[currentChunk].push(face);
-		} else {
-			const facePositions = getPositionsFromFace(positions, face);
-			const tempPositions = new Array<Vector3>();
+	// for (const face of faces) {
+	// 	if (!chunks[currentChunk] || chunks[currentChunk].size() === 0) {
+	// 		if (!chunks[currentChunk]) chunks[currentChunk] = [face]; else chunks[currentChunk].push(face);
+	// 	} else {
+	// 		const facePositions = getPositionsFromFace(positions, face);
+	// 		const tempPositions = new Array<Vector3>();
 
-			if (!isWithinBox(facePositions)) throw `Not possible`;
+	// 		if (!isWithinBox(facePositions)) throw `Not possible`;
 
-			let outOfBounds = false;
+	// 		let outOfBounds = false;
 
-			for (const facePosition of facePositions) {
-				tempPositions.push(facePosition);
+	// 		for (const facePosition of facePositions) {
+	// 			tempPositions.push(facePosition);
 
-				if (!isWithinBox([...flat(chunks[currentChunk].map(f => getPositionsFromFace(positions, f))), ...tempPositions])) {
-					outOfBounds = true;
-					break;
-				}
-			}
+	// 			if (!isWithinBox([...flat(chunks[currentChunk].map(f => getPositionsFromFace(positions, f))), ...tempPositions])) {
+	// 				outOfBounds = true;
+	// 				break;
+	// 			}
+	// 		}
 
-			if (outOfBounds) {
-				currentChunk++;
-				chunks[currentChunk] = [face];
-			} else {
-				chunks[currentChunk].push(face);
-			}
-		}
-	}
+	// 		if (outOfBounds) {
+	// 			currentChunk++;
+	// 			chunks[currentChunk] = [face];
+	// 		} else {
+	// 			chunks[currentChunk].push(face);
+	// 		}
+	// 	}
+	// }
+	const chunks = [faces];
 
 	return chunks.map(chunk => createMeshFromChunks(chunk, {
 		positions,
 		normals,
 		uvs
-	}));
+	}, primitiveOrigin));
 }
 
 export function createMeshFromChunks(chunk: Face[], meta: {
 	positions: Vector3[],
 	normals?: Vector3[],
 	uvs?: Vector2[]
-}): EditableMesh {
+}, origin: CFrame): [CFrame, EditableMesh] {
 	const mesh = AssetService.CreateEditableMesh();
 
 	const vertexIds: number[] = [];
@@ -261,7 +264,7 @@ export function createMeshFromChunks(chunk: Face[], meta: {
 		}
 	}
 
-	return mesh;
+	return [origin, mesh];
 }
 
 export function createEditableMeshFromData(meshData: {
