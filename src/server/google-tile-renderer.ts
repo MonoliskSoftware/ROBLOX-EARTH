@@ -1,5 +1,5 @@
 import { AssetService, TweenService, Workspace } from "@rbxts/services";
-import { applyTextureToMesh, createEditableMeshFromData } from "shared/libraries/rbmesh";
+import { applyTextureToMesh, generateEditableMeshFromData } from "shared/libraries/rbmesh";
 
 export type GoogleTileData = {
 	meshes: {
@@ -27,28 +27,31 @@ type Primitive = {
 export class TileRenderer {
 	private primitives = new Array<Primitive>();
 
-	constructor(path: string, private readonly tileData: GoogleTileData) {
+	constructor(private readonly path: string, private readonly tileData: GoogleTileData) {
 		try {
 			for (let i = 0; i < tileData.meshes[0].primitives.size(); i++) {
 				const meshData = tileData.meshes[0].primitives[i];
 				const textureData = tileData.textures[meshData.texture];
 
-				const mesh = createEditableMeshFromData(meshData, new Vector2(textureData[0].size() / 512, textureData.size() / 512));
-				const texture = applyTextureToMesh(tileData.textures[meshData.texture]);
-				const meshPart = AssetService.CreateMeshPartAsync(Content.fromObject(mesh));
+				const meshes = generateEditableMeshFromData(meshData, new Vector2(textureData[0].size() / 512, textureData.size() / 512));
 
-				meshPart.Parent = Workspace;
-				meshPart.Anchored = true;
-				meshPart.TextureContent = Content.fromObject(texture);
-				meshPart.Name = `${path}.${i}`;
+				for (const mesh of meshes) {
+					const texture = applyTextureToMesh(tileData.textures[meshData.texture]);
+					const meshPart = AssetService.CreateMeshPartAsync(Content.fromObject(mesh));
 
-				const primitive = {
-					mesh,
-					texture,
-					meshPart
-				} satisfies Primitive;
+					meshPart.Parent = Workspace;
+					meshPart.Anchored = true;
+					meshPart.TextureContent = Content.fromObject(texture);
+					meshPart.Name = `${path}.${this.primitives.size()}`;
 
-				this.primitives[i] = primitive;
+					const primitive = {
+						mesh,
+						texture,
+						meshPart
+					} satisfies Primitive;
+
+					this.primitives.push(primitive);
+				}
 			}
 		} catch (e) {
 			warn(`Failed to load tile: ${e}`);
@@ -90,6 +93,13 @@ export class TileRenderer {
 			const val = new Instance("BoolValue");
 
 			val.Parent = this.primitives[0].meshPart;
+
+			val.Changed.Connect(() => func());
+		} else {
+			const val = new Instance("BoolValue");
+
+			val.Parent = Workspace;
+			val.Name = this.path;
 
 			val.Changed.Connect(() => func());
 		}

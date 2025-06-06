@@ -76,7 +76,9 @@ export class GoogleTile {
 			if (this.chunk.path === finalPath) return;
 			if (this.children === undefined) await this.expand();
 
-			this.children?.forEach(child => child.search(finalPath));
+			const p = this.children?.map(child => child.search(finalPath));
+
+			if (p) await Promise.all(p);
 		} else return;
 	}
 }
