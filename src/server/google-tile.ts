@@ -28,29 +28,33 @@ function all<T>(promises: Promise<T>[]): Promise<T[]> {
 	});
 }
 
+const MAX_ZOOM = 19;
+
 export class GoogleTile {
 	public state: "leaf" | "rendered" | "link" = "link";
 	public children?: GoogleTile[];
 	public renderer?: TileRenderer;
 
-	constructor(private readonly chunk: Chunk) {
-		if (chunk.type === "mesh") {
+	constructor(private readonly chunk: Chunk, private readonly minZoom = 0) {
+		if (chunk.type === "mesh" && chunk.path.size() >= minZoom) {
 			const data = (fetch(`http://127.0.0.1:8787/get?path=${chunk.path}`).await()[1] as RobloxResponse).json().await()[1] as GoogleTileData;
 
 			this.renderer = new TileRenderer(chunk.path, data);
 			this.renderer.bindToExpand(() => this.expand());
 		}
 
-		if ("children" in chunk) this.children = chunk.children.map(child => new GoogleTile(child));
+		if ("children" in chunk) this.children = chunk.children.map(child => new GoogleTile(child, minZoom));
 	}
 
-	public static async createRoot(): Promise<GoogleTile> {
+	public static async createRoot(minZoom: number): Promise<GoogleTile> {
 		const roots = await fetch(`http://127.0.0.1:8787/roots`).then(data => data.json());
 
-		return new GoogleTile(roots as Chunk);
+		return new GoogleTile(roots as Chunk, minZoom);
 	}
 
 	public async expand() {
+		if (this.chunk.path.size() === MAX_ZOOM) throw `This chunk is already at the maximum size!`;
+
 		const body = await fetch(`http://127.0.0.1:8787/expand?path=${this.chunk.path}`).then(data => data.json()) as { paths: string[] };
 
 		const promises = body.paths.map((path) =>
@@ -59,7 +63,7 @@ export class GoogleTile {
 				path: path,
 				mesh: undefined as unknown as string,
 				children: undefined as unknown as Array<Chunk>
-			}))
+			}, this.minZoom))
 		);
 
 		this.children = await all(promises);

@@ -1,5 +1,5 @@
 import { AssetService } from "@rbxts/services";
-import { EARTH_RADIUS } from "shared/earth/tiles/terrain";
+import { EARTH_RADIUS, METERS_TO_STUDS } from "shared/earth/tiles/terrain";
 import { Coord } from "../mapbox";
 
 function alignLookVectorToZ(cf: CFrame): CFrame {
@@ -49,8 +49,8 @@ function scale(cframe: CFrame, mul: number) {
 	return new CFrame(cframe.Position.mul(mul)).mul(cframe.sub(cframe.Position));
 }
 
-export const mainCoord = new Coord(40.7128, -74.0060);
-export const SCALE_FACTOR = 1 / 10000;
+export const mainCoord = new Coord(40.64257462046939, -73.77675633571651);
+export const SCALE_FACTOR = METERS_TO_STUDS / 1;
 export const position = mainCoord.toVector3(CFrame.identity, EARTH_RADIUS);
 export const ORIGIN_RELATIVE = getMoveToNorthPoleCFrame(position);
 

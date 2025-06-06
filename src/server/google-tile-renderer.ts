@@ -18,66 +18,78 @@ function getMulFromZoom(zoom: number) {
 	}
 }
 
+type Primitive = {
+	mesh: EditableMesh,
+	texture: EditableImage,
+	meshPart: MeshPart
+}
+
 export class TileRenderer {
-	private mesh!: EditableMesh;
-	private texture!: EditableImage;
-	private meshPart!: MeshPart;
+	private primitives = new Array<Primitive>();
 
 	constructor(path: string, private readonly tileData: GoogleTileData) {
-		const zoom = path.size();
-
 		try {
-			const meshData = tileData.meshes[0].primitives[0];
-			const texture = tileData.textures[meshData.texture];
+			for (let i = 0; i < tileData.meshes[0].primitives.size(); i++) {
+				const meshData = tileData.meshes[0].primitives[i];
+				const textureData = tileData.textures[meshData.texture];
 
-			this.mesh = createEditableMeshFromData(meshData, new Vector2(texture[0].size() / 512, texture.size() / 512));
-			this.texture = applyTextureToMesh(texture);
-			this.meshPart = AssetService.CreateMeshPartAsync(Content.fromObject(this.mesh));
-			this.meshPart.Parent = Workspace;
-			this.meshPart.Anchored = true;
-			this.meshPart.TextureContent = Content.fromObject(this.texture);
+				const mesh = createEditableMeshFromData(meshData, new Vector2(textureData[0].size() / 512, textureData.size() / 512));
+				const texture = applyTextureToMesh(tileData.textures[meshData.texture]);
+				const meshPart = AssetService.CreateMeshPartAsync(Content.fromObject(mesh));
+
+				meshPart.Parent = Workspace;
+				meshPart.Anchored = true;
+				meshPart.TextureContent = Content.fromObject(texture);
+				meshPart.Name = `${path}.${i}`;
+
+				const primitive = {
+					mesh,
+					texture,
+					meshPart
+				} satisfies Primitive;
+
+				this.primitives[i] = primitive;
+			}
 		} catch (e) {
 			warn(`Failed to load tile: ${e}`);
-			this.meshPart = new Instance("MeshPart");
-			this.meshPart.Parent = Workspace;
-			this.meshPart.Anchored = true;
 		}
 
-		this.meshPart.Name = path;
 		this.setRendering(true);
 	}
 
 	public setRendering(rendering: boolean) {
-		if (rendering) this.meshPart.Parent = Workspace;
+		for (const primitive of this.primitives) {
+			if (rendering) primitive.meshPart.Parent = Workspace;
 
-		this.meshPart.Transparency = rendering ? 1 : 0;
+			primitive.meshPart.Transparency = rendering ? 1 : 0;
 
-		const tween = TweenService.Create(this.meshPart, new TweenInfo(0.5), {
-			Transparency: rendering ? 0 : 1
-		});
+			const tween = TweenService.Create(primitive.meshPart, new TweenInfo(0.5), {
+				Transparency: rendering ? 0 : 1
+			});
 
-		tween.Completed.Connect(() => {
-			if (!rendering) this.meshPart.Parent = script;
-		});
+			tween.Completed.Connect(() => {
+				if (!rendering) primitive.meshPart.Parent = script;
+			});
 
-		tween.Play();
+			tween.Play();
+		}
 	}
 
 	public destroy() {
-		this.mesh.Destroy();
-		this.texture.Destroy();
-		this.meshPart.Destroy();
+		this.primitives.forEach(prim => {
+			prim.mesh.Destroy();
+			prim.meshPart.Destroy();
+			prim.texture.Destroy();
+		});
 
-		rawset(this, "mesh", undefined);
-		rawset(this, "texture", undefined);
-		rawset(this, "meshPart", undefined);
+		this.primitives.clear();
 	}
 
 	public bindToExpand(func: Callback) {
-		if (this.meshPart) {
+		if (this.primitives.size() > 0) {
 			const val = new Instance("BoolValue");
 
-			val.Parent = this.meshPart;
+			val.Parent = this.primitives[0].meshPart;
 
 			val.Changed.Connect(() => func());
 		}
