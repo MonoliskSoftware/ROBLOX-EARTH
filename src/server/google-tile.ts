@@ -1,4 +1,5 @@
 import { fetch, RobloxResponse } from "shared/libraries/fetch";
+import { SCALE_FACTOR } from "shared/libraries/rbmesh";
 import { GoogleTileData, TileRenderer } from "./google-tile-renderer";
 import { Chunk } from "./tree";
 
@@ -37,7 +38,8 @@ export class GoogleTile {
 
 	constructor(private readonly chunk: Chunk, private readonly minZoom = 0) {
 		if (chunk.type === "mesh" && chunk.path.size() >= minZoom) {
-			const data = (fetch(`http://127.0.0.1:8787/get?path=${chunk.path}`).await()[1] as RobloxResponse).json().await()[1] as GoogleTileData;
+			// decodeMesh()
+			const data = (fetch(`http://127.0.0.1:8787/get?path=${chunk.path}&scale=${SCALE_FACTOR}`).await()[1] as RobloxResponse).json().await()[1] as GoogleTileData;
 
 			this.renderer = new TileRenderer(chunk.path, data);
 			this.renderer.bindToExpand(() => this.expand());
@@ -47,7 +49,7 @@ export class GoogleTile {
 	}
 
 	public static async createRoot(minZoom: number): Promise<GoogleTile> {
-		const roots = await fetch(`http://127.0.0.1:8787/roots`).then(data => data.json());
+		const roots = await fetch(`http://127.0.0.1:8787/root`).then(data => data.json());
 
 		return new GoogleTile(roots as Chunk, minZoom);
 	}
@@ -67,6 +69,7 @@ export class GoogleTile {
 		);
 
 		this.children = await all(promises);
+		this.children.forEach(child => child.renderer?.setRendering(true));
 
 		this.renderer?.setRendering(false);
 	}
@@ -80,5 +83,13 @@ export class GoogleTile {
 
 			if (p) await Promise.all(p);
 		} else return;
+	}
+
+	public async expandDescendants(min: number, max: number) {
+		const zoom = this.chunk.path.size();
+
+		if (!this.children && zoom >= min) await this.expand();
+
+		if (zoom <= max) this.children?.forEach(child => child.expandDescendants(min, max));
 	}
 }

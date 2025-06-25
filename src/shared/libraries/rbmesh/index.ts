@@ -1,3 +1,4 @@
+import Object from "@rbxts/object-utils";
 import { AssetService } from "@rbxts/services";
 import { EARTH_RADIUS, METERS_TO_STUDS } from "shared/earth/tiles/terrain";
 import { Coord } from "../mapbox";
@@ -124,8 +125,22 @@ function getPositionsFromFace(poses: Vector3[], face: Face) {
 	return [poses[face.v0], poses[face.v1], poses[face.v2]];
 }
 
+function getPositionsReferencedInFaces(faces: Face[]) {
+	return faces.reduce((accum, face) => [...accum, face.v0, face.v1, face.v2], new Array<number>()).reduce((accum, id) => accum.includes(id) ? accum : [...accum, id], new Array<number>());
+}
+
 function flat<T>(k: Array<T[]>): T[] {
 	return k.reduce((accum, c) => [...accum, ...c], new Array<T>());
+}
+
+function createObject<T>(keys: number[], values: T[]) {
+	const obj = {} as { [key: number]: T };
+
+	for (const key of keys) {
+		obj[key + 1] = values[key];
+	}
+
+	return obj as T[];
 }
 
 export function generateEditableMeshFromData(meshData: {
@@ -141,12 +156,12 @@ export function generateEditableMeshFromData(meshData: {
 	const uvs = new Array<Vector2>();
 	const faces = new Array<Face>();
 
-	const primitiveOrigin = ORIGIN_RELATIVE.mul(new CFrame(meshData.origin[0], meshData.origin[1], meshData.origin[2]));
+	const primitiveOrigin = scale(ORIGIN_RELATIVE.mul(new CFrame(meshData.origin[0], meshData.origin[1], meshData.origin[2])), SCALE_FACTOR);
 
 	for (let i = 0; i < meshData.positions.size(); i += 3) {
 		const pos = new Vector3(meshData.positions[i], meshData.positions[i + 1], meshData.positions[i + 2]);
 
-		positions.push(scale(primitiveOrigin.mul(new CFrame(pos)), SCALE_FACTOR).Position);
+		positions.push(scale(new CFrame(pos), SCALE_FACTOR).Position);
 	}
 
 	// Add normals if present
@@ -154,7 +169,7 @@ export function generateEditableMeshFromData(meshData: {
 		for (let i = 0; i < meshData.normals.size(); i += 3) {
 			const normal = new Vector3(meshData.normals[i], meshData.normals[i + 1], meshData.normals[i + 2]);
 
-			normals.push(scale(primitiveOrigin.mul(new CFrame(normal)), SCALE_FACTOR).Position);
+			normals.push(scale(new CFrame(normal), SCALE_FACTOR).Position);
 		}
 	}
 
@@ -181,43 +196,12 @@ export function generateEditableMeshFromData(meshData: {
 		faces.push(face);
 	}
 
-	// const chunks = new Array<Face[]>();
-	// let currentChunk = 0;
-
-	// for (const face of faces) {
-	// 	if (!chunks[currentChunk] || chunks[currentChunk].size() === 0) {
-	// 		if (!chunks[currentChunk]) chunks[currentChunk] = [face]; else chunks[currentChunk].push(face);
-	// 	} else {
-	// 		const facePositions = getPositionsFromFace(positions, face);
-	// 		const tempPositions = new Array<Vector3>();
-
-	// 		if (!isWithinBox(facePositions)) throw `Not possible`;
-
-	// 		let outOfBounds = false;
-
-	// 		for (const facePosition of facePositions) {
-	// 			tempPositions.push(facePosition);
-
-	// 			if (!isWithinBox([...flat(chunks[currentChunk].map(f => getPositionsFromFace(positions, f))), ...tempPositions])) {
-	// 				outOfBounds = true;
-	// 				break;
-	// 			}
-	// 		}
-
-	// 		if (outOfBounds) {
-	// 			currentChunk++;
-	// 			chunks[currentChunk] = [face];
-	// 		} else {
-	// 			chunks[currentChunk].push(face);
-	// 		}
-	// 	}
-	// }
 	const chunks = [faces];
 
 	return chunks.map(chunk => createMeshFromChunks(chunk, {
-		positions,
-		normals,
-		uvs
+		positions: positions,
+		normals: normals,
+		uvs: uvs
 	}, primitiveOrigin));
 }
 
@@ -232,19 +216,19 @@ export function createMeshFromChunks(chunk: Face[], meta: {
 	const normalIds: number[] = [];
 	const uvIds: number[] = [];
 
-	for (const pos of meta.positions) {
-		vertexIds.push(mesh.AddVertex(pos));
+	for (const [index, pos] of Object.entries(meta.positions)) {
+		vertexIds[index - 1] = mesh.AddVertex(pos);
 	}
 
 	if (meta.normals) {
-		for (const normal of meta.normals) {
-			normalIds.push(mesh.AddNormal(normal));
+		for (const [index, normal] of Object.entries(meta.normals)) {
+			normalIds[index - 1] = mesh.AddNormal(normal);
 		}
 	}
 
 	if (meta.uvs) {
-		for (const uv of meta.uvs) {
-			uvIds.push(mesh.AddUV(uv));
+		for (const [index, uv] of Object.entries(meta.uvs)) {
+			uvIds[index - 1] = mesh.AddUV(uv);
 		}
 	}
 
@@ -265,62 +249,4 @@ export function createMeshFromChunks(chunk: Face[], meta: {
 	}
 
 	return [origin, mesh];
-}
-
-export function createEditableMeshFromData(meshData: {
-	positions: number[],
-	normals?: number[],
-	uvs?: number[],
-	indices: number[],
-	origin: number[],
-	texture: number
-}, mul: Vector2): EditableMesh {
-	const mesh = AssetService.CreateEditableMesh();
-
-	const vertexIds: number[] = [];
-	const normalIds: number[] = [];
-	const uvIds: number[] = [];
-
-	const primitiveOrigin = ORIGIN_RELATIVE.mul(new CFrame(meshData.origin[0], meshData.origin[1], meshData.origin[2]));
-
-	// Add vertices
-	for (let i = 0; i < meshData.positions.size(); i += 3) {
-		const pos = new Vector3(meshData.positions[i], meshData.positions[i + 1], meshData.positions[i + 2]);
-		vertexIds.push(mesh.AddVertex(scale(primitiveOrigin.mul(new CFrame(pos)), SCALE_FACTOR).Position));
-	}
-
-	// Add normals if present
-	if (meshData.normals) {
-		for (let i = 0; i < meshData.normals.size(); i += 3) {
-			const normal = new Vector3(meshData.normals[i], meshData.normals[i + 1], meshData.normals[i + 2]);
-			normalIds.push(mesh.AddNormal(scale(primitiveOrigin.mul(new CFrame(normal)), SCALE_FACTOR).Position));
-		}
-	}
-
-	// Add UVs if present
-	if (meshData.uvs) {
-		for (let i = 0; i < meshData.uvs.size(); i += 2) {
-			const uv = new Vector2(meshData.uvs[i] * mul.X, meshData.uvs[i + 1] * mul.Y);
-			uvIds.push(mesh.AddUV(uv));
-		}
-	}
-
-	// Add faces
-	for (let i = 0; i < meshData.indices.size(); i += 3) {
-		const i0 = meshData.indices[i];
-		const i1 = meshData.indices[i + 1];
-		const i2 = meshData.indices[i + 2];
-
-		// mesh.get
-		const faceId = mesh.AddTriangle(vertexIds[i0], vertexIds[i1], vertexIds[i2]);
-
-		if (normalIds.size() > 0) {
-			mesh.SetFaceNormals(faceId, [normalIds[i0], normalIds[i1], normalIds[i2]]);
-		}
-		if (uvIds.size() > 0) {
-			mesh.SetFaceUVs(faceId, [uvIds[i0], uvIds[i1], uvIds[i2]]);
-		}
-	}
-
-	return mesh;
 }

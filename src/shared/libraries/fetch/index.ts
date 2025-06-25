@@ -1,7 +1,5 @@
 import Object from "@rbxts/object-utils";
 import { HttpService } from "@rbxts/services";
-
-// Define types to mimic standard Response interface
 export interface RobloxResponse {
 	readonly ok: boolean;
 	readonly status: number;
@@ -13,8 +11,6 @@ export interface RobloxResponse {
 	json(): Promise<unknown>;
 	arrayBuffer(): Promise<Array<number>>;
 }
-
-// Define request options to match fetch API
 interface FetchOptions {
 	method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD";
 	headers?: { [key: string]: string };
@@ -22,21 +18,17 @@ interface FetchOptions {
 	timeout?: number;
 }
 
-// Custom fetch implementation for Roblox
 export async function fetch(url: string, options: FetchOptions = {}): Promise<RobloxResponse> {
-	// Set default options
 	const requestOptions: FetchOptions = {
 		method: "GET",
 		headers: {},
 		...options
 	};
 
-	// Prepare headers
 	const headers = requestOptions.headers ?? {};
 	headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
 
 	try {
-		// Make the HTTP request using HttpService
 		const response = HttpService.RequestAsync({
 			Url: url,
 			Method: requestOptions.method,
@@ -44,7 +36,6 @@ export async function fetch(url: string, options: FetchOptions = {}): Promise<Ro
 			Body: requestOptions.body,
 		});
 
-		// Create a response object that mimics the Fetch API
 		const robloxResponse: RobloxResponse = {
 			ok: response.Success,
 			status: response.Success ? 200 : response.StatusCode,
@@ -65,7 +56,6 @@ export async function fetch(url: string, options: FetchOptions = {}): Promise<Ro
 			},
 
 			async arrayBuffer() {
-				// Convert string response to byte array
 				const body = response.Body;
 				const bytes: Array<number> = [];
 
@@ -79,7 +69,6 @@ export async function fetch(url: string, options: FetchOptions = {}): Promise<Ro
 
 		return robloxResponse;
 	} catch (err) {
-		// Handle network errors
 		const errorResponse: RobloxResponse = {
 			ok: false,
 			status: 0,

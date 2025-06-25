@@ -1,3 +1,4 @@
+import Object from "@rbxts/object-utils";
 import { AssetService, TweenService, Workspace } from "@rbxts/services";
 import { EARTH_RADIUS, METERS_TO_STUDS } from "shared/earth/tiles/terrain";
 import { applyTextureToMesh, generateEditableMeshFromData, ORIGIN_RELATIVE, scale, SCALE_FACTOR } from "shared/libraries/rbmesh";
@@ -35,15 +36,17 @@ export class TileRenderer {
 
 			try {
 				const meshes = generateEditableMeshFromData(meshData, new Vector2(textureData[0].size() / 512, textureData.size() / 512));
+				const textures = new Map(Object.entries(tileData.textures).map(([id, data]) => [id, applyTextureToMesh(data)]));
 
 				for (const [origin, mesh] of meshes) {
-					const texture = applyTextureToMesh(tileData.textures[meshData.texture]);
+					const texture = textures.get(meshData.texture)!;
 					const meshPart = AssetService.CreateMeshPartAsync(Content.fromObject(mesh));
 
-					meshPart.Parent = Workspace;
+					meshPart.Parent = script;
 					meshPart.Anchored = true;
 					meshPart.TextureContent = Content.fromObject(texture);
 					meshPart.Name = `${path}.${this.primitives.size()}`;
+					meshPart.CFrame = origin;
 
 					const primitive = {
 						mesh,
@@ -71,8 +74,6 @@ export class TileRenderer {
 				this.primitives.push(primitive);
 			}
 		}
-
-		this.setRendering(true);
 	}
 
 	public setRendering(rendering: boolean) {
