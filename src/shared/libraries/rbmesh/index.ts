@@ -50,9 +50,9 @@ export function scale(cframe: CFrame, mul: number) {
 	return new CFrame(cframe.Position.mul(mul)).mul(cframe.sub(cframe.Position));
 }
 
-export const mainCoord = new Coord(40.64257462046939, -73.77675633571651);
-export const SCALE_FACTOR = METERS_TO_STUDS / 500;
-export const position = mainCoord.toVector3(CFrame.identity, EARTH_RADIUS);
+export const mainCoord = new Coord(42.347409461811154, -71.0879606707485);
+export const SCALE_FACTOR = METERS_TO_STUDS;
+export const position = mainCoord.toVector3(CFrame.identity, EARTH_RADIUS * SCALE_FACTOR);
 export const ORIGIN_RELATIVE = getMoveToNorthPoleCFrame(position);
 
 export function applyTextureToMesh(

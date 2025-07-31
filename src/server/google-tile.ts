@@ -1,4 +1,4 @@
-import { fetch, RobloxResponse } from "shared/libraries/fetch";
+import { fetch } from "shared/libraries/fetch";
 import { SCALE_FACTOR } from "shared/libraries/rbmesh";
 import { GoogleTileData, TileRenderer } from "./google-tile-renderer";
 import { Chunk } from "./tree";
@@ -39,7 +39,7 @@ export class GoogleTile {
 	constructor(private readonly chunk: Chunk, private readonly minZoom = 0) {
 		if (chunk.type === "mesh" && chunk.path.size() >= minZoom) {
 			// decodeMesh()
-			const data = (fetch(`http://127.0.0.1:8787/get?path=${chunk.path}&scale=${SCALE_FACTOR}`).await()[1] as RobloxResponse).json().await()[1] as GoogleTileData;
+			const data = fetch(`http://127.0.0.1:8787/get?path=${chunk.path}&scale=${SCALE_FACTOR}`).then(out => out.json()).await()[1] as GoogleTileData;
 
 			this.renderer = new TileRenderer(chunk.path, data);
 			this.renderer.bindToExpand(() => this.expand());
@@ -48,47 +48,56 @@ export class GoogleTile {
 		if ("children" in chunk) this.children = chunk.children.map(child => new GoogleTile(child, minZoom));
 	}
 
-	public static async createRoot(minZoom: number): Promise<GoogleTile> {
-		const roots = await fetch(`http://127.0.0.1:8787/root`).then(data => data.json());
+	public static createRoot(minZoom: number): GoogleTile {
+		const roots = fetch(`http://127.0.0.1:8787/root`).then(data => data.json()).await()[1];
 
 		return new GoogleTile(roots as Chunk, minZoom);
 	}
 
-	public async expand() {
+	public expand() {
 		if (this.chunk.path.size() === MAX_ZOOM) throw `This chunk is already at the maximum size!`;
 
-		const body = await fetch(`http://127.0.0.1:8787/expand?path=${this.chunk.path}`).then(data => data.json()) as { paths: string[] };
+		const body = (fetch(`http://127.0.0.1:8787/expand?path=${this.chunk.path}`).then(data => data.json()).await()[1]) as { paths: string[] };
 
-		const promises = body.paths.map((path) =>
-			Promise.resolve().then(() => new GoogleTile({
+		// const promises = body.paths.map((path) =>
+		// 	Promise.resolve().then(() => new GoogleTile({
+		// 		type: "mesh",
+		// 		path: path,
+		// 		mesh: undefined as unknown as string,
+		// 		children: undefined as unknown as Array<Chunk>
+		// 	}, this.minZoom))
+		// );
+
+		// this.children = all(promises).await()[1] as GoogleTile[];
+		this.children = body.paths.map(path => {
+			return new GoogleTile({
 				type: "mesh",
 				path: path,
 				mesh: undefined as unknown as string,
 				children: undefined as unknown as Array<Chunk>
-			}, this.minZoom))
-		);
+			}, this.minZoom);
+		});
 
-		this.children = await all(promises);
 		this.children.forEach(child => child.renderer?.setRendering(true));
 
 		this.renderer?.setRendering(false);
 	}
 
-	public async search(finalPath: string) {
+	public search(finalPath: string) {
 		if (startsWith(finalPath, this.chunk.path)) {
 			if (this.chunk.path === finalPath) return;
-			if (this.children === undefined) await this.expand();
+			if (this.children === undefined) this.expand();
 
 			const p = this.children?.map(child => child.search(finalPath));
 
-			if (p) await Promise.all(p);
+			if (p) Promise.all(p).await();
 		} else return;
 	}
 
-	public async expandDescendants(min: number, max: number) {
+	public expandDescendants(min: number, max: number) {
 		const zoom = this.chunk.path.size();
 
-		if (!this.children && zoom >= min) await this.expand();
+		if (!this.children && zoom >= min) this.expand();
 
 		if (zoom <= max) this.children?.forEach(child => child.expandDescendants(min, max));
 	}

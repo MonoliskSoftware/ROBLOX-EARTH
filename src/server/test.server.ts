@@ -1,6 +1,6 @@
 import { GoogleTile } from "./google-tile";
 
-const main = GoogleTile.createRoot(12).await()[1] as GoogleTile;
+const main = GoogleTile.createRoot(12) as GoogleTile;
 
 const BATTERY_PARK = [
 	"214272517260526070",
@@ -38,15 +38,15 @@ const ROOSEVELT_ISLAND = [
 ];
 
 function test(k: string[]) {
-	for (const id of k) main.search(id).await();
+	for (const id of k) main.search(id);
 }
 
-main.expandDescendants(13, 14).await();
+main.expandDescendants(3, 10);
 
 // test(BATTERY_PARK);
 // test(WHITE_HOUSE);
 // test(SCHOOL);
-test(JFK);
+test(["0110001320213214200"]);
 // test(APARTMENT_BUILDING);
 // test(LGA);
 // test(ROOSEVELT_ISLAND);

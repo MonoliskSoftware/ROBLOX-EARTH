@@ -46,7 +46,7 @@ export class TileRenderer {
 					meshPart.Anchored = true;
 					meshPart.TextureContent = Content.fromObject(texture);
 					meshPart.Name = `${path}.${this.primitives.size()}`;
-					meshPart.CFrame = origin;
+					meshPart.CFrame = origin.mul(CFrame.fromEulerAnglesXYZ(-math.pi / 2, 0, 0));
 
 					const primitive = {
 						mesh,
